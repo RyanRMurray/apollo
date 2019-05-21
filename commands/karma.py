@@ -45,10 +45,14 @@ def current_milli_time():
 
 
 # Utility coroutine to generate the matplotlib Figure object that can be manipulated by the calling function
-async def plot_karma(karma_dict: Dict[str, List[KarmaChange]]) -> (str, str):
+async def plot_karma(karma_dict: Dict[str, List[KarmaChange]], earliest = "1970-01-01") -> (str, str):
     # Error if there's no input data
     if len(karma_dict) == 0:
         return '', ''
+    
+    # Parse earliest date to get data from
+    earliest_date = datetime.strptime(earliest, "%Y-%m-%d")
+
 
     # Matplotlib preamble
     plt.rcParams.update({'figure.autolayout': True})
@@ -56,7 +60,7 @@ async def plot_karma(karma_dict: Dict[str, List[KarmaChange]]) -> (str, str):
 
     # Get the earliest and latest karma values fo
     earliest_karma = utc.localize(datetime.utcnow()).astimezone(timezone('Europe/London'))
-    latest_karma = utc.localize(datetime(1970, 1, 1)).astimezone(timezone('Europe/London'))
+    latest_karma = utc.localize(earliest_date).astimezone(timezone('Europe/London'))
     for key, changes in karma_dict.items():
         earliest_karma = changes[0].local_time if changes[0].local_time < earliest_karma else earliest_karma
         latest_karma = changes[-1].local_time if changes[-1].local_time >= latest_karma else latest_karma
@@ -320,7 +324,7 @@ class Karma:
 
     @karma.command(help='Plots the karma change over time of the given karma topic(s)')
     @commands.cooldown(5, 60, BucketType.user)
-    async def plot(self, ctx: Context, *args: clean_content):
+    async def plot(self, ctx: Context, *args: clean_content, earliest = None):
         await ctx.trigger_typing()
         t_start = current_milli_time()
 
@@ -352,7 +356,10 @@ class Karma:
             karma_dict[karma_stripped] = karma_item.changes
 
         # Plot the graph and save it to a png
-        filename, path = await plot_karma(karma_dict)
+        if not earliest:
+            filename, path = await plot_karma(karma_dict)
+        else:
+            filename, path = await plot_karma(karma_dict, earliest)
         t_end = current_milli_time()
 
         if CONFIG['DEBUG']:
@@ -389,6 +396,11 @@ class Karma:
 
             display_name = get_name_string(ctx.message)
             await ctx.send(f'Here you go, {display_name}! :chart_with_upwards_trend:', embed=embed)
+
+    @karma.command(help='Plots the karma change over time of the given karma topic(s), given a date to start from')
+    @commands.cooldown(5, 60, BucketType.user)
+    async def plotafter(self, ctx: Context, *args: clean_content):
+        plot(ctx, args[:-1], args[-1])
 
     @plot.error
     async def plot_error_handler(self, ctx: Context, error: KarmaError):
